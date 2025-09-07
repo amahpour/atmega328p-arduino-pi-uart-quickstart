@@ -14,8 +14,7 @@ sketches/
     serial_echo.ino     # "READY"/hello/echo at 38400 baud
 
 scripts/
-  program_one.sh        # Burn fuses + compile + upload to a single chip
-  program_all.sh        # (optional) Batch version; loops over N chips
+  program.sh            # Burn fuses + compile + upload to a single chip
   pi_test.sh            # Simple UART poke tool for the Pi
 
 README.md
@@ -25,16 +24,21 @@ LICENSE
 
 ---
 
-## Hardware you need
+## Download & install Arduino CLI
 
-* ATmega328P-PU (DIP-28) x N
-* **Atmel-ICE (AVR)** with 2×3 ISP cable
-* Breadboard + jumpers
-* Regulated **3.3 V** supply
-* Decoupling: **0.1 µF** near VCC; tie **AVCC → VCC**; optional **0.1 µF** AREF→GND if you use ADC
-* Raspberry Pi (40-pin header) for UART testing
+```bash
+# Download the installer and run it (grabs the latest arduino-cli for your platform)
+curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
 
-> **Important:** Atmel-ICE does **not** power the target. Provide 3.3 V to VCC (pin 7) **and** AVCC (pin 20). Common GND.
+# Move the binary into your PATH (recommended path for user-installed CLI tools)
+sudo mv ./arduino-cli /usr/local/bin/
+
+# Sanity checks
+which arduino-cli
+arduino-cli version
+```
+
+> If `/usr/local/bin` isn’t on your PATH, adjust accordingly. You can also keep `arduino-cli` in the repo and call it with `./arduino-cli …`.
 
 ---
 
@@ -99,7 +103,7 @@ Optional LED:
 | 2 (PD0)        | RX       | GPIO14 / TXD0 (pin 8)  |
 | 8/22           | GND      | Any GND (e.g., pin 6)  |
 
-> Free the Pi’s serial from the login shell (raspi-config → Serial): disable shell, enable hardware. Device is typically `/dev/serial0`.
+> Free the Pi’s serial from the login shell (`raspi-config` → *Interface Options* → *Serial*): disable shell, enable hardware. Device is typically `/dev/serial0`.
 
 ---
 
@@ -130,6 +134,8 @@ Cross-wiring rule for any UART:
 * **GND ↔ GND**
 * **3.3 V** logic only (power the ATmega at 3.3 V to avoid level shifting)
 
+> GPIO0/1 are the HAT ID EEPROM lines; avoid `uart2` if you rely on HAT auto-detect.
+
 ---
 
 ## Quick start (burn, build, upload)
@@ -142,40 +148,53 @@ arduino-cli upload  -b "$FQBN" -P "$PROG" sketches/serial_echo
 
 ---
 
-## Test from the Pi
+## Manual UART test (no helper script)
 
-With the MCU wired to `/dev/serial0` (or a `/dev/ttyAMA*` from the table):
+**Prereqs**
 
-```bash
-chmod +x scripts/pi_test.sh
-scripts/pi_test.sh /dev/serial0
-```
+* MCU flashed with `serial_echo.ino` at **38400 baud**.
+* Cross-wired to a Pi UART (e.g., `/dev/ttyAMA2`): **Pi TX → ATmega RX (pin 2)**, **Pi RX ← ATmega TX (pin 3)**, **GND↔GND**.
+* ATmega powered at **3.3 V** (VCC pin 7 **and** AVCC pin 20), with a 0.1 µF decoupler.
 
-Expected:
-
-* On reset: `READY`
-* Send `h` → `hello`
-* Send `t` → increasing `millis()`
-* Any other byte → echoed back
-
-Raw test (no script), example for `/dev/ttyAMA3`:
+**1) Pick a UART device**
 
 ```bash
-stty -F /dev/ttyAMA3 38400 -icrnl -ixon -echo
-( cat < /dev/ttyAMA3 & )
-printf "h" > /dev/ttyAMA3
-printf "t" > /dev/ttyAMA3
+ls /dev/ttyAMA* /dev/serial* 2>/dev/null
+# e.g. /dev/ttyAMA2 /dev/ttyAMA3 /dev/ttyAMA4 /dev/ttyAMA5 ... or /dev/serial0
 ```
+
+**2) Open the port and talk to the chip** (example uses `/dev/ttyAMA2`)
+
+```bash
+stty -F /dev/ttyAMA2 38400 -icrnl -ixon -echo
+( cat < /dev/ttyAMA2 & ); READER=$!
+
+printf "h" > /dev/ttyAMA2   # expect: hello
+printf "t" > /dev/ttyAMA2   # expect: increasing millis()
+
+kill $READER
+```
+
+**Expected output**
+
+```
+hello
+39364
+```
+
+(You’ll see a larger number for `t` as millis() advances.)
+
+> Prefer the helper? `scripts/pi_test.sh /dev/<device>` does this interactively.
 
 ---
 
 ## Troubleshooting
 
-* **Vtarget shows 0.0 V then \~3.3 V:** first read is before measurement; the later value is the real one.
-* **“Bad response to AVR sign-on”:** usually wiring, missing AVCC-to-VCC, or wrong clock fuses.
-* **Slow ISP clock:** pass through to avrdude, e.g. `arduino-cli … -- -B 8`.
+* **Vtarget shows 0.0 V then \~3.3 V:** first read is before measurement; the later value is real.
+* **“Bad response to AVR sign-on”:** usually wiring (RESET/SCK/MOSI/MISO), missing AVCC→VCC, or wrong clock fuses.
+* **Slow ISP clock:** pass through to avrdude, e.g. `arduino-cli … -- -B 8` (or `-B 125kHz`).
 * **debugWIRE set:** DWEN fuse disables ISP; clear via a debugWIRE session or HV programmer.
-* **External clock fuse set:** provide a temporary clock to XTAL1 (pin 9) or add a crystal once to recover, then reburn fuses to 8 MHz internal RC.
+* **External clock fuse set:** provide a temporary clock to XTAL1 (pin 9) or add a crystal once to recover, then reburn fuses to **8 MHz internal RC**.
 
 ---
 
