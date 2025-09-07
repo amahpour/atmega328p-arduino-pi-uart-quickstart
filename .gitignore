@@ -1,0 +1,8 @@
+.arduino*
+.build
+build
+*.hex
+*.elf
+*.map
+*.bin
+.DS_Store
