@@ -1,12 +1,6 @@
-# Bare ATmega328P @ 3.3V, 8 MHz — Arduino + Atmel‑ICE + Raspberry Pi UART (multi-node) Quickstart
+# Bare ATmega328P @ 3.3 V, 8 MHz — Arduino + Atmel-ICE + Raspberry Pi UART (multi-node) Quickstart
 
-This repo shows the *minimum‑parts* way to run **ATmega328P** chips on a breadboard using the **internal 8 MHz RC** oscillator at **3.3 V**, program them with an **Atmel‑ICE** *directly from the Arduino toolchain*, and talk to them from a **Raspberry Pi UART**. It includes a tiny serial echo sketch and a bash script to batch‑flash multiple chips.
-
-> Why this setup?  
-> • No crystal/caps, no level shifter (Pi is 3.3 V).  
-> • Correct fuses/BOD in one click.  
-> • Quiet startup (no bootloader chatter).  
-> • Arduino code and libraries still “just work” compiled for `F_CPU=8 MHz`.
+This repo shows the *minimum-parts* way to run **ATmega328P** chips on a breadboard using the **internal 8 MHz RC** oscillator at **3.3 V**, program them with an **Atmel-ICE** *directly from the Arduino toolchain*, and talk to them from a **Raspberry Pi UART**. It includes a tiny serial echo sketch and a bash script to batch-flash multiple chips.
 
 ---
 
@@ -29,90 +23,101 @@ LICENSE
 ---
 
 ## Hardware you need
-- ATmega328P‑P U (DIP‑28) x N
-- **Atmel‑ICE** (AVR) and a 2×3 ISP cable
-- Breadboard + jumper wires
-- Power: **3.3 V** to VCC/AVCC, common **GND**
-- (Strongly recommended) **0.1 µF** decoupler near VCC; tie **AVCC → VCC**; optional 0.1 µF on AREF→GND if using ADC
-- Raspberry Pi with 40‑pin header (for `/dev/serial0`) if you plan to test over UART
 
-> **No external crystal/caps** required. We use the internal 8 MHz oscillator.
+* ATmega328P-PU (DIP-28) x N
+* **Atmel-ICE** (AVR) and a 2×3 ISP cable
+* Breadboard + jumper wires
+* Power: **3.3 V** to VCC/AVCC, common **GND**
+* (Strongly recommended) **0.1 µF** decoupler near VCC; tie **AVCC → VCC**; optional 0.1 µF on AREF→GND if using ADC
+* Raspberry Pi with 40-pin header (for `/dev/serial0`) if you plan to test over UART
 
----
-
-## Software you need
-- **Arduino CLI** (or Arduino IDE)
-- **MiniCore** Arduino core for ATmega328 (installs via Arduino CLI in the script)
+> **No external crystal/caps** required. We use the internal 8 MHz oscillator.
 
 ---
 
-## Quick start (Arduino CLI + Atmel‑ICE)
+## Arduino CLI Setup (MiniCore)
 
-> If your Atmel‑ICE programmer ID is different on your OS, set `PROG=...` when calling the script (see “Programmer selection” below).
-
-1) **Connect Atmel‑ICE ISP** to the chip on a breadboard:  
-   - RESET ↔ pin 1  
-   - VCC ↔ pin 7 (and also power **AVCC** pin 20)  
-   - GND ↔ pins 8/22  
-   - MOSI ↔ pin 17 (PB3)  
-   - MISO ↔ pin 18 (PB4)  
-   - SCK  ↔ pin 19 (PB5)
-
-2) **Batch‑flash** (defaults to 3 chips, change with `-n`):  
-   ```bash
-   cd atmega328p-arduino-pi-uart-quickstart
-   chmod +x scripts/program_all.sh
-   scripts/program_all.sh -n 3
-   ```
-
-What the script does:
-- Installs **MCUdude:avr (MiniCore)**
-- Sets fuses for **8 MHz internal RC** + **BOD 2.7 V** (`Burn Bootloader` step)
-- Compiles `sketches/serial_echo`
-- Uploads the sketch **N** times; after each upload, swap the chip and hit Enter
-
-### Programmer selection
-By default the script uses `PROG=atmel_ice`. To list available programmer IDs for your platform:
 ```bash
-arduino-cli board details -b MCUdude:avr:ATmega328 | sed -n '/Programmers:/,/^$/p'
+arduino-cli config init
+arduino-cli config set board_manager.additional_urls \
+  https://mcudude.github.io/MiniCore/package_MCUdude_MiniCore_index.json
+
+arduino-cli core update-index
+arduino-cli core install MiniCore:avr
 ```
-Override at runtime:
+
+Board name:
+
 ```bash
-PROG=atmelice_isp scripts/program_all.sh -n 3
+FQBN='MiniCore:avr:328:clock=8MHz_internal,BOD=2v7,bootloader=no_bootloader'
+```
+
+Programmer:
+
+```bash
+PROG='atmel_ice'   # or 'atmelice_isp' depending on your system
 ```
 
 ---
 
-## Wiring for Raspberry Pi UART test
-Use 3.3 V power and a common ground. Cross the UART lines:
+## Wiring Setup
 
-- **Pi TXD (GPIO14, header pin 8)** → **ATmega D0 / RX (pin 2)**
-- **Pi RXD (GPIO15, header pin 10)** ← **ATmega D1 / TX (pin 3)**
-- **GND ↔ GND**
+### USART and LED Connection
 
-Enable the Pi’s UART (`/boot/config.txt` or `raspi-config`). Then run the included test:
+A Raspberry Pi is used as the UART device. Hookup guide:
+
+| Component   | ATmega328P Pin | Pi / USB-UART |
+| ----------- | -------------- | ------------- |
+| TX          | PD1 (pin 3)    | Pi RX         |
+| RX          | PD0 (pin 2)    | Pi TX         |
+| GND         | GND (pin 8/22) | Pi GND        |
+
+### ISP Programming Using Atmel-ICE
+
+| Atmel-ICE AVR port pin | ATmega328P Pin      |
+| ---------------------- | ------------------- |
+| Pin 1 (TCK)            | Pin 19 (PB5 / SCK)  |
+| Pin 2 (GND)            | Pin 8 (GND)         |
+| Pin 3 (TDO)            | Pin 18 (PB4 / MISO) |
+| Pin 4 (VTG)            | Pin 7 (VCC)         |
+| Pin 6 (nSRST)          | Pin 1 (PC6 / RESET) |
+| Pin 9 (TDI)            | Pin 17 (PB3 / MOSI) |
+
+### ATmega328P Pinout
+
+![ATmega328P Pinout Diagram](images/Atmega328P_Pinout.jpg)
+
+---
+
+## Quick start (Arduino CLI + Atmel-ICE)
+
+```bash
+arduino-cli burn-bootloader -b "$FQBN" -P "$PROG" --verbose
+arduino-cli compile -b "$FQBN" sketches/serial_echo
+arduino-cli upload -b "$FQBN" -P "$PROG" sketches/serial_echo
+```
+
+Swap chips and repeat the upload step as needed.
+
+---
+
+## Raspberry Pi UART Test
 
 ```bash
 chmod +x scripts/pi_test.sh
 scripts/pi_test.sh /dev/serial0
-# In another terminal, try keys: h, t, or type text and press Enter to see echoes.
 ```
 
-Expected device output on boot: `READY`  
-- Send `h` → replies `hello`  
-- Send `t` → prints the current `millis()`  
-- Any other byte → echoes back
+Expected device output on boot: `READY`
 
-> **Baud:** 38400 (robust with the internal RC clock). If you see framing errors at higher baud, stay at 38400–57600 or calibrate `OSCCAL`.
-
----
-
-## Notes & troubleshooting
-- If uploads fail, verify your **ISP wiring** and that **RESET** is not tied low.  
-- Do **not** set the `RSTDISBL` fuse unless you have a high‑voltage programmer.  
-- If you want serial uploads later, you can burn **Optiboot @ 8 MHz** with MiniCore and add a way to pulse **RESET** (manual button or small DTR cap). This repo defaults to **no bootloader** for instant, quiet startup.
+* Send `h` → replies `hello`
+* Send `t` → prints millis()
+* Any other byte → echoes back
 
 ---
 
-## License
-MIT — see `LICENSE`.
+## Power Considerations
+
+* Power the ATmega328P at **3.3 V** if wiring directly to the Pi (safe levels).
+* Tie **AVCC → VCC**, decouple with 0.1 µF.
+* If you run at 5 V, you’ll need level shifting for Pi RX.

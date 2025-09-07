@@ -16,16 +16,17 @@ while getopts ":n:" opt; do
   case $opt in
     n) COUNT="$OPTARG" ;;
     *) echo "Usage: $0 [-n COUNT]"; exit 1 ;;
-  endesac
+  esac
 done
 
 echo "==> Installing/Updating Arduino CLI core index..."
 arduino-cli core update-index
 
-echo "==> Installing MiniCore (MCUdude:avr)..."
-arduino-cli core install MCUdude:avr
+echo "==> Installing MiniCore..."
+arduino-cli core install MiniCore:avr \
+  --additional-urls https://mcudude.github.io/MiniCore/package_MCUdude_MiniCore_index.json
 
-FQBN='MCUdude:avr:ATmega328:clock=8MHz_internal,BOD=2v7,bootloader=no_bootloader'
+FQBN='MiniCore:avr:328:clock=8MHz_internal,BOD=2v7,bootloader=no_bootloader'
 
 echo "==> Burning bootloader (fuses only) with $PROG"
 arduino-cli burn-bootloader -b "$FQBN" -P "$PROG"
@@ -43,5 +44,5 @@ done
 
 echo
 echo "==> Listing available programmers (for reference):"
-arduino-cli board details -b MCUdude:avr:ATmega328 | sed -n '/Programmers:/,/^$/p' || true
+arduino-cli board details -b MiniCore:avr:328 | sed -n '/Programmers:/,/^$/p' || true
 echo "All done."
